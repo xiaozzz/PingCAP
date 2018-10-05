@@ -23,7 +23,7 @@ public class Test {
                     Task task = new Task(count.get());
                     count.getAndIncrement();
                     taskQueue.add(task);
-                    System.out.println("Thread: " + threadName + ", " + count);
+//                    System.out.println("Thread: " + threadName + ", " + count);
                     Thread.sleep(500);
                 }
             }catch (InterruptedException e) {
@@ -86,17 +86,16 @@ public class Test {
         }
     }
 
+    // 开启 n 个线程同时 add 和 get，共进行 10 轮，最后判断 get empty数量和最后 queue size 是否一致
     void test01() {
         try {
-            int n = 10;
+            int n = 20;
             add(n);
             get(n);
-            Thread.sleep(10*600);
-            System.out.println(taskQueue.len());
-            System.out.println(emptyCount.get());
-            System.out.println(taskQueue.len() == emptyCount.get());
-//            Thread.sleep(10*600);
-//            System.out.println(taskQueue.len());
+            Thread.sleep((n+1)*500);
+            System.out.println("taskQueue len: " + taskQueue.len());
+            System.out.println("Empty times:" + emptyCount.get());
+            System.out.println("isPass:" + (taskQueue.len() == emptyCount.get() ? "true" : "false"));
         } catch (InterruptedException e) {
 
         }

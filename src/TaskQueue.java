@@ -1,13 +1,10 @@
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TaskQueue {
-    // 用一个链表来表示待执行的任务队列
+    // 用一个链表来表示[待执行]的任务队列
     private class Node {
         Task task;
         Node next;
@@ -16,14 +13,14 @@ public class TaskQueue {
         }
     }
 
-    // 用一个集合来表示运行中的任务集合
+    // 用一个集合来表示[运行中]的任务集合
     private Set<Task> set;
 
-    // 表头和表尾
+    // 表头和表尾，其中 queueHead.task 为 null，第一个 task 实际为 queueHead.next.task
     private Node queueHead;
     private Node queueTail;
 
-    // queue size
+    // queue 大小
     private AtomicInteger count = new AtomicInteger();
 
     // 读锁和写锁
@@ -38,47 +35,64 @@ public class TaskQueue {
         queueHead = queueTail = new Node(null);
     }
 
-    public boolean add(Task task)
-            throws InterruptedException {
-
-        if (isClosed()) {
+    public boolean add(Task task) {
+        try {
+            if (isClosed()) {
+                return false;
+            }
+            if (task == null) {
+                shutdown();
+                throw new NullPointerException();
+            }
+            final ReentrantLock putLock = this.putLock;
+            final AtomicInteger count = this.count;
+            putLock.lockInterruptibly();
+            try {
+                // 入队尾
+                queueTail.next = new Node(task);
+                queueTail = queueTail.next;
+                // 加长度
+                count.getAndIncrement();
+            } finally {
+                putLock.unlock();
+            }
+            return true;
+        } catch (Exception e) {
             return false;
         }
-        if (task == null) {
-            shutdown();
-            throw new NullPointerException();
-        }
-        final ReentrantLock putLock = this.putLock;
-        final AtomicInteger count = this.count;
-        putLock.lockInterruptibly();
-        try {
-            queueTail = queueTail.next = new Node(task);
-            count.getAndIncrement();
-        } finally {
-            putLock.unlock();
-        }
-        return true;
     }
 
-    public Task get()
-            throws InterruptedException {
-        Task task = null;
-        final AtomicInteger count = this.count;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lockInterruptibly();
+    public Task get() {
         try {
-            if (queueHead.next != null) {
-                Node h = queueHead;
-                Node first = h.next;
-                queueHead = first;
-                task = first.task;
-                first.task = null;
-                count.getAndDecrement();
+            Task task;
+            final AtomicInteger count = this.count;
+            final ReentrantLock takeLock = this.takeLock;
+            takeLock.lockInterruptibly();
+            try {
+                if (queueHead.next != null) {
+                    // 非空
+                    // 出队头
+                    Node h = queueHead;
+                    Node first = h.next;
+                    queueHead = first;
+                    task = first.task;
+                    first.task = null;
+                    // 减长度
+                    count.getAndDecrement();
+                } else {
+                    // 空
+                    task = null;
+                }
+            } catch (Exception e) {
+                shutdown();
+                task = null;
+            } finally {
+                takeLock.unlock();
             }
-        } finally {
-            takeLock.unlock();
+            return task;
+        } catch (Exception e) {
+            return null;
         }
-        return task;
     }
 
     public int len() {
@@ -86,8 +100,14 @@ public class TaskQueue {
     }
 
     public void done(Task task) {
-        if (set.contains(task)) {
-            set.remove(task);
+        try {
+            boolean isRemoved = set.remove(task);
+            // 异常处理，待移除的task不在running状态
+            if (!isRemoved) {
+                throw new Exception();
+            }
+        } catch (Exception e) {
+            // 处理异常
         }
     }
 
