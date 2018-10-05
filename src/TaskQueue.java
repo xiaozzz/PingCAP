@@ -1,9 +1,11 @@
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TaskQueue {
+
     // 用一个链表来表示[待执行]的任务队列
     private class Node {
         Task task;
@@ -13,12 +15,12 @@ public class TaskQueue {
         }
     }
 
-    // 用一个集合来表示[运行中]的任务集合
-    private Set<Task> set;
-
     // 表头和表尾，其中 queueHead.task 为 null，第一个 task 实际为 queueHead.next.task
     private Node queueHead;
     private Node queueTail;
+
+    // 用一个集合来表示[运行中]的任务集合
+    private Set<Task> set;
 
     // queue 大小
     private AtomicInteger count = new AtomicInteger();
@@ -31,8 +33,9 @@ public class TaskQueue {
     private int state = 1;
 
     TaskQueue() {
-        set = new CopyOnWriteArraySet<>();
-        queueHead = queueTail = new Node(null);
+        set = Collections.synchronizedSet(new HashSet<>());
+        queueHead = new Node(null);
+        queueTail = queueHead;
     }
 
     public boolean add(Task task) {
